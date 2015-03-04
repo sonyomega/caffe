@@ -23,7 +23,13 @@ SRC_DIRS := $(shell find * -type d -exec bash -c "find {} -maxdepth 1 \
 # The target shared library name
 LIB_BUILD_DIR := $(BUILD_DIR)/lib
 STATIC_NAME := $(LIB_BUILD_DIR)/lib$(PROJECT).a
-DYNAMIC_NAME := $(LIB_BUILD_DIR)/lib$(PROJECT).so
+DYNAMIC_VERSION_MAJOR 		:= 0
+DYNAMIC_VERSION_MINOR 		:= 10
+DYNAMIC_VERSION_REVISION 	:= 1
+DYNAMIC_NAME_SHORT := lib$(PROJECT).so
+DYNAMIC_SONAME_SHORT := $(DYNAMIC_NAME_SHORT).$(DYNAMIC_VERSION_MAJOR)
+DYNAMIC_VERSIONED_NAME_SHORT := $(DYNAMIC_SONAME_SHORT).$(DYNAMIC_VERSION_MINOR).$(DYNAMIC_VERSION_REVISION)
+DYNAMIC_NAME := $(LIB_BUILD_DIR)/$(DYNAMIC_VERSIONED_NAME_SHORT)
 
 ##############################
 # Get all source files
@@ -225,6 +231,7 @@ ifeq ($(LINUX), 1)
 	# boost::thread is reasonably called boost_thread (compare OS X)
 	# We will also explicitly add stdc++ to the link target.
 	LIBRARIES += boost_thread stdc++
+	VERSIONFLAGS += -Wl,-soname,$(DYNAMIC_SONAME_SHORT) -Wl,-rpath,$(ORIGIN)/../../build/lib
 endif
 
 # OS X:
@@ -246,6 +253,7 @@ ifeq ($(OSX), 1)
 	# we need to explicitly ask for the rpath to be obeyed
 	DYNAMIC_FLAGS := -install_name @rpath/libcaffe.so
 	ORIGIN := @loader_path
+	VERSIONFLAGS += -Wl,-install_name,$(DYNAMIC_SONAME_SHORT) -Wl,-rpath,$(ORIGIN)/../../build/lib
 else
 	ORIGIN := \$$ORIGIN
 endif
@@ -489,7 +497,9 @@ $(ALL_BUILD_DIRS): | $(BUILD_DIR_LINK)
 
 $(DYNAMIC_NAME): $(OBJS) | $(LIB_BUILD_DIR)
 	@ echo LD -o $@
-	$(Q)$(CXX) -shared -o $@ $(OBJS) $(LINKFLAGS) $(LDFLAGS) $(DYNAMIC_FLAGS)
+	$(Q)$(CXX) -shared -o $@ $(OBJS) $(VERSIONFLAGS) $(LINKFLAGS) $(LDFLAGS) $(DYNAMIC_FLAGS)
+	@ cd $(BUILD_DIR)/lib; rm -f $(DYNAMIC_SONAME_SHORT); ln -s $(DYNAMIC_VERSIONED_NAME_SHORT) $(DYNAMIC_SONAME_SHORT)
+	@ cd $(BUILD_DIR)/lib; rm -f $(DYNAMIC_NAME_SHORT);   ln -s $(DYNAMIC_SONAME_SHORT) $(DYNAMIC_NAME_SHORT)
 
 $(STATIC_NAME): $(OBJS) | $(LIB_BUILD_DIR)
 	@ echo AR -o $@
@@ -608,6 +618,8 @@ $(DISTRIBUTE_DIR): all py | $(DISTRIBUTE_SUBDIRS)
 	# add libraries
 	cp $(STATIC_NAME) $(DISTRIBUTE_DIR)/lib
 	cp $(DYNAMIC_NAME) $(DISTRIBUTE_DIR)/lib
+	cd $(DISTRIBUTE_DIR)/lib; rm -f $(DYNAMIC_SONAME_SHORT); ln -s $(DYNAMIC_VERSIONED_NAME_SHORT) $(DYNAMIC_SONAME_SHORT)
+	cd $(DISTRIBUTE_DIR)/lib; rm -f $(DYNAMIC_NAME_SHORT);   ln -s $(DYNAMIC_SONAME_SHORT) $(DYNAMIC_NAME_SHORT)
 	# add python - it's not the standard way, indeed...
 	cp -r python $(DISTRIBUTE_DIR)/python
 
